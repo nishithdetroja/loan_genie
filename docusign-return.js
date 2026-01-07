@@ -1,5 +1,5 @@
 /* docusign-return.js
- * Secure DocuSign return handler with origin handshake
+ * Secure DocuSign return handler (Q2)
  */
 
 (function () {
@@ -12,12 +12,11 @@
     params.get("envelopeId") || params.get("EnvelopeId") || "";
 
   // ----------------------------
-  // Store parent origin (handshake)
+  // Parent origin handshake
   // ----------------------------
   let parentOrigin = null;
 
   window.addEventListener("message", (e) => {
-    // Accept origin only once
     if (e.data?.type === "PARENT_ORIGIN" && !parentOrigin) {
       parentOrigin = e.origin;
       sendResult();
@@ -34,32 +33,26 @@
     };
 
     try {
-      // Popup case
+      // Popup
       if (window.opener) {
         window.opener.postMessage(message, parentOrigin);
         window.close();
         return;
       }
 
-      // Iframe case
+      // Iframe
       if (window.parent && window.parent !== window) {
         window.parent.postMessage(message, parentOrigin);
-        return;
       }
     } catch (e) {
-      // ignore
+      // intentionally silent
     }
-
-    // Fallback: redirect into SPA
-    window.location.replace(
-      `/settings/docusign?event=${encodeURIComponent(event)}&envelopeId=${encodeURIComponent(envelopeId)}`
-    );
   }
 
-  // Safety timeout (in case parent never sends handshake)
+  // Optional safety log (can remove in prod)
   setTimeout(() => {
     if (!parentOrigin) {
-      console.warn("Parent origin not received");
+      console.warn("Parent origin handshake not received");
     }
   }, 3000);
 })();
