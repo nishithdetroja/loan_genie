@@ -1,8 +1,5 @@
 /* docusign-return.js
- * Secure DocuSign return handler
- * - No postMessage("*")
- * - Restricted admin origins
- * - Supports iframe + popup
+ * Secure DocuSign return handler with origin handshake
  */
 
 (function () {
@@ -15,67 +12,54 @@
     params.get("envelopeId") || params.get("EnvelopeId") || "";
 
   // ----------------------------
-  // Allowed admin origins
-  // (add PROD / PTE as needed)
+  // Store parent origin (handshake)
   // ----------------------------
-  const ALLOWED_ADMIN_ORIGINS = [
-    "https://dev-admin.uatdev.altaone.com",
-    "https://admin.altaone.com"
-  ];
+  let parentOrigin = null;
 
-  // ----------------------------
-  // Detect parent origin safely
-  // ----------------------------
-  let targetOrigin = null;
+  window.addEventListener("message", (e) => {
+    // Accept origin only once
+    if (e.data?.type === "PARENT_ORIGIN" && !parentOrigin) {
+      parentOrigin = e.origin;
+      sendResult();
+    }
+  });
 
-  if (document.referrer) {
+  function sendResult() {
+    if (!parentOrigin) return;
+
+    const message = {
+      type: "DOCUSIGN_RETURN",
+      event,
+      envelopeId
+    };
+
     try {
-      const referrerOrigin = new URL(document.referrer).origin;
-      if (ALLOWED_ADMIN_ORIGINS.includes(referrerOrigin)) {
-        targetOrigin = referrerOrigin;
+      // Popup case
+      if (window.opener) {
+        window.opener.postMessage(message, parentOrigin);
+        window.close();
+        return;
+      }
+
+      // Iframe case
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(message, parentOrigin);
+        return;
       }
     } catch (e) {
-      // ignore invalid referrer
+      // ignore
     }
+
+    // Fallback: redirect into SPA
+    window.location.replace(
+      `/settings/docusign?event=${encodeURIComponent(event)}&envelopeId=${encodeURIComponent(envelopeId)}`
+    );
   }
 
-  // ----------------------------
-  // Message payload
-  // ----------------------------
-  const message = {
-    type: "DOCUSIGN_RETURN",
-    event,
-    envelopeId
-  };
-
-  // ----------------------------
-  // Send message
-  // ----------------------------
-  try {
-    if (window.opener && targetOrigin) {
-      // DocuSign opened in popup
-      window.opener.postMessage(message, targetOrigin);
-      window.close();
-      return;
+  // Safety timeout (in case parent never sends handshake)
+  setTimeout(() => {
+    if (!parentOrigin) {
+      console.warn("Parent origin not received");
     }
-
-    if (window.parent && window.parent !== window && targetOrigin) {
-      // Embedded iframe
-      window.parent.postMessage(message, targetOrigin);
-      return;
-    }
-  } catch (err) {
-    // fall through to redirect
-  }
-
-  // ----------------------------
-  // Fallback: redirect back to SPA
-  // ----------------------------
-  const fallbackUrl =
-    "/settings/docusign" +
-    `?event=${encodeURIComponent(event)}` +
-    `&envelopeId=${encodeURIComponent(envelopeId)}`;
-
-  window.location.replace(fallbackUrl);
+  }, 3000);
 })();
-
