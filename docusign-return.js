@@ -17,6 +17,7 @@
   let parentOrigin = null;
 
   window.addEventListener("message", (e) => {
+    debugger;
     if (e.data?.type === "PARENT_ORIGIN" && !parentOrigin) {
       parentOrigin = e.origin;
       sendResult();
@@ -33,6 +34,7 @@
     };
 
     try {
+      debugger;
       // Popup
       if (window.opener) {
         window.opener.postMessage(message, parentOrigin);
